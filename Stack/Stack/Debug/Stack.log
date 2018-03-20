@@ -1,0 +1,33 @@
+﻿  Stack.cpp
+c:\users\oscar\desktop\cop 4520\stack\stack\stack\stack.cpp(46): error C2819: type 'std::tuple<Node<TimestampedItem> *,int>' does not have an overloaded member 'operator ->'
+          with
+          [
+              TimestampedItem=int
+          ]
+  c:\users\oscar\desktop\cop 4520\stack\stack\stack\stack.cpp(25): note: see declaration of 'std::tuple<Node<TimestampedItem> *,int>'
+          with
+          [
+              TimestampedItem=int
+          ]
+  c:\users\oscar\desktop\cop 4520\stack\stack\stack\stack.cpp(46): note: did you intend to use '.' instead?
+  c:\users\oscar\desktop\cop 4520\stack\stack\stack\stack.cpp(43): note: while compiling class template member function 'void SPBuffer<int>::ins(TimestampedItem)'
+          with
+          [
+              TimestampedItem=int
+          ]
+  c:\users\oscar\desktop\cop 4520\stack\stack\stack\stack.cpp(107): note: see reference to function template instantiation 'void SPBuffer<int>::ins(TimestampedItem)' being compiled
+          with
+          [
+              TimestampedItem=int
+          ]
+  c:\users\oscar\desktop\cop 4520\stack\stack\stack\stack.cpp(105): note: see reference to class template instantiation 'SPBuffer<int>' being compiled
+c:\users\oscar\desktop\cop 4520\stack\stack\stack\stack.cpp(46): error C2039: 'get': is not a member of 'std::tuple<Node<TimestampedItem> *,int>'
+          with
+          [
+              TimestampedItem=int
+          ]
+  c:\users\oscar\desktop\cop 4520\stack\stack\stack\stack.cpp(25): note: see declaration of 'std::tuple<Node<TimestampedItem> *,int>'
+          with
+          [
+              TimestampedItem=int
+          ]
