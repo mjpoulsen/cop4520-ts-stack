@@ -16,7 +16,6 @@ using namespace std;
 template <typename T>
 struct threadParams;
 
-// TODO Are these constants fine?
 const int EMPTY_ITEM = INT_MIN;
 const int INVALID_ITEM = EMPTY_ITEM + 1;
 
@@ -63,20 +62,14 @@ public:
 		TimestampedItem<T>* newNode = createNode(item, false, NEW_ITEM_TIME);
 		TimestampedItem<T>* topMost = atomic_top.load(std::memory_order_relaxed);
 
-		// while (topMost->next != NULL && topMost->next->timestamp != NEW_ITEM_TIME && topMost->taken.load(std::memory_order_relaxed)) {
 		while (topMost->next != NULL && topMost->taken.load(std::memory_order_relaxed)) {
 			topMost = topMost->next;
 		}
 
-		// std::cout << "Test...\n" << std::flush;
-
 		newNode->next = topMost;
 
 		if (atomic_top.compare_exchange_weak(topMost, newNode)) {
-			// std::cout << "Test...\n" << std::flush;
 			size.fetch_add(1, std::memory_order_relaxed);
-			// TODO increase abaCounter
-			// atomic_top.load(std::memory_order_relaxed)->abaCounter++;
 		}
 
 		return newNode;
@@ -87,22 +80,12 @@ public:
 	}
 
 	bool tryRemSP(TimestampedItem<T>* oldTop, TimestampedItem<T>* node)	{
-		// cout << "Stack's size: " << size.load(std::memory_order_relaxed) << " -- " << std::flush;
-		// cout << "OldTop: " << oldTop->item << " -- " << std::flush;
-		// cout << "Node " << node->item << " -- " << std::flush;
-
-		bool _false = false;
-		if (oldTop->taken.compare_exchange_weak(_false, true)) {
-			if (atomic_top.compare_exchange_weak(oldTop, node)) {
-				// cout << "Removed: " << oldTop->item << " -- " << std::flush;
-				size.fetch_sub(1, std::memory_order_relaxed);
-				free(oldTop);
-			}
-			// cout << "Stack's size: " << size.load(std::memory_order_relaxed) << " -- " << std::flush;
-			// cout << "Stack's top: " << atomic_top.load(std::memory_order_relaxed)->item << " -- " << std::flush;
+		if (atomic_top.compare_exchange_weak(oldTop, node)) {
+			size.fetch_sub(1, std::memory_order_relaxed);
 			return true;
+		} else {
+			return false;
 		}
-		return false;
 	}
 
 	void printTop() {
@@ -119,7 +102,11 @@ public:
 		TimestampedItem<T> *n = atomic_top.load(std::memory_order_relaxed);
 
 		while(n != NULL) {
-			cout << "Item: " << n->item << ", ts: " << n->timestamp << endl;
+			if (n->next != NULL) {
+				cout << "Item: " << n->item << ", ts: " << n->timestamp << ", next: " << n->next->item << endl;
+			} else {
+				cout << "Item: " << n->item << ", ts: " << n->timestamp << ", next: NULL" << endl;
+			}
 			n = n->next;
 		}
 	}
@@ -176,16 +163,6 @@ public:
 		}
 	}
 
-	// Prints the each SPBuffer stack.
-	// void printRemoveBuffers() {
-	// 	for (int i = 0; i < NUM_THREADS; i++) {
-	// 		std::cout << "Printing " << i << "'s stack:" << endl;
-	// 		std::cout << "============\n";
-	// 		spBuffers[i]->printRemove();
-	// 		std::cout << "============\n" << endl;
-	// 	}
-	// }
-
 	// Inserts an element into a SPBuffer and returns a TimestampedItem object.
 	TimestampedItem<T>* ins(T element, int threadId) {
 		TimestampedItem<T> *item = threadSPBuffer(threadId)->ins(element);
@@ -200,7 +177,7 @@ public:
 
 	// Returns the latest start time.
 	long getStart() {
-		if (timestampCounter.load(std::memory_order_relaxed) == 1) {
+		if (timestampCounter.load(std::memory_order_relaxed) >= 1) {
 			return timestampCounter.fetch_add(1, std::memory_order_relaxed);
 		} else {
 			return timestampCounter.fetch_sub(1, std::memory_order_relaxed);
@@ -217,74 +194,39 @@ public:
 		item->timestamp = t;
 	}
 
-	bool empty() {
-		// std::cout << "Checking atomic_top\n" << std::flush;
-		for (auto &spBuffer : spBuffers) {
-			if (spBuffer->atomic_top.load(std::memory_order_relaxed)->item != SENTINEL_ITEM) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	// TODO Confirm startTime should be a long.
 	// Try to remove an item with a timestamp greater than the startTime param.
 	// If successful, the TimestampedItem will be removed from the stack, otherwise
 	TimestampedItem<T>* tryRem(long startTime) {
-		// std::cout << "Start time: " << startTime << "\n" << std::flush;
 		TimestampedItem<T>* youngest = NULL;
 		SPBuffer<T>* buf = NULL;
-		int i = 0;
+		TimestampedItem<T>* item = NULL;
+		atomic<int> i;
+		i.store(0, std::memory_order_relaxed);
 
 		for (auto &spBuffer : spBuffers) {
-			// TODO Figure out the problem here. 
-			// spBuffer->getSP(); was in the pseudocode but the program does not end.
-			// Right now, enhanced for-loop will try to remove the top element. This is fine, but the loop always starts
-			// at the beginning, 0...NUM_THREADS. Is this what we want?
-
-			/*
-			 * Possible solution...
-			 * // Iterate to a random start buffer.
-			 * for (uint64_t i = 0; i < start; i++) {
-			 * 	current_buffer = current_buffer->next.load();
-			 * }
-			 */
-
-			// std::cout << "Try to pop...\n" << std::flush;
-
-			TimestampedItem<T>* item = spBuffer->atomic_top.load(std::memory_order_relaxed);
+			item = spBuffer->atomic_top.load(std::memory_order_relaxed);
 
 			if (item->item == SENTINEL_ITEM) {
-				i++;
+				i.fetch_add(1, std::memory_order_relaxed);
 				continue;
 			}
 
 			// Eliminate item if possible.
-			// std::cout << "Time check...\n" << std::flush;
 			if (item->timestamp >= startTime) {
 				if (spBuffer->tryRemSP(item)) {
 					return item;
 				}
 			}
 
-			// std::cout << "Youngest check...\n" << std::flush;
 			if (youngest == NULL || item->timestamp > youngest->timestamp) {
-				// std::cout << "Youngest item: " << item->item << "\n" << std::flush;
 				youngest = item;
 				buf = spBuffer;
 			}
 		}
 
-		// if (i == spBuffers.size()) {
-		// 	return &emptyItem;
-		// }
-
-		if (i == spBuffers.size()) { // Emptiness check.
-			// std::cout << "Returning empty item....\n" << std::flush;
+		if (i == spBuffers.size()) {
 			return &emptyItem;
 		}
-
-		// std::cout << "youngest->item: " << youngest->item << "\n" << std::flush; 
 
 		if (youngest != NULL && buf->tryRemSP(youngest)) {
 			return youngest;
@@ -332,13 +274,10 @@ public:
 	T pop() {
 		long ts = buffer->getStart();
 		TimestampedItem<T>* item;
-		int i = 0;
 		do {
 			item = buffer->tryRem(ts);
-			std::cout << "Pop do-while: item->item: " << item->item << "\n" << std::flush;
-			// i++;
 		} while (item->item == INVALID_ITEM);
-		
+
 		if (item->item == EMPTY_ITEM) {
 			return EMPTY_ITEM;
 		} else {
@@ -411,23 +350,12 @@ static void *thread_pop(void* args) {
 }
 
 void start(int operations, double pushRatio, double popRatio, int _num_threads) {
-
-	// typedef void * (*THREADFUNCPTR)(void *);
-
 	TS_Stack<int> the_Stack(_num_threads, INT_MIN);
 	pthread_t threads[_num_threads];
 	pthread_attr_t attr;
 	double totalPush = 0.0, totalPop = 0.0;
 	double maxPush = (double) operations * pushRatio;
 	double maxPop = (double) operations * popRatio;
-
-	// the_Stack.push(10, 0);
-	// the_Stack.push(11, 1);
-	// the_Stack.push(12, 2);
-	// the_Stack.push(13, 3);
-	// the_Stack.push(14, 0);
-
-	// the_Stack.printBuffers();
 
 	/* Initialize and set thread detached attribute */
 	pthread_attr_init(&attr);
@@ -456,40 +384,14 @@ void start(int operations, double pushRatio, double popRatio, int _num_threads) 
 		args[i].threadId = i;
 		args[i].maxPop = maxPop / _num_threads;
 		args[i].maxPush = maxPush / _num_threads;
-		// std::cout << "MaxPush: " << args[i].maxPush << " MaxPop: " << args[i].maxPop << std::flush;
 		rc = pthread_create(&threads[i], NULL, &TS_Stack<int>::doWork, &args[i]);
 		if (rc != 0) {
 			std::cout << "Thread was not created " << i << std::flush;
 			exit(-1);
 		}
 	}
-	// while (true) {
-	// 	int op = rand() % 2;
-	// 	int thread_id = c % _num_threads;
-	// 	c++;
 
-	// 	if (op == 1 && totalPop < maxPop) {
-	// 		// pop
-	// 		args[thread_id].threadId = thread_id;
-	// 		args[thread_id].context = &the_Stack;
-	// 		pthread_create(&threads[thread_id], NULL, &TS_Stack<int>::thread_pop, (void*) &args[thread_id]);
-	// 		// pthread_join(threads[thread_id], NULL);
-	// 		totalPop++;
-	// 	} else if (op == 0 && totalPush < maxPush) {
-	// 		// push
-	// 		args[thread_id].threadId = thread_id;
-	// 		args[thread_id].context = &the_Stack;
-	// 		pthread_create(&threads[thread_id], NULL, &TS_Stack<int>::thread_push, (void*) &args[thread_id]);
-	// 		// pthread_join(threads[thread_id], NULL);
-	// 		totalPush++;
-	// 	}
-
-	// 	if (totalPush >= maxPush && totalPop >= maxPop) {
-	// 		break;
-	// 	}
-	// }
-
-	std::cout << "Waiting for threads...\n" << std::flush;
+	// std::cout << "Waiting for threads...\n" << std::flush;
 
 	/* Free attribute and wait for the other threads */
     pthread_attr_destroy(&attr);
@@ -500,41 +402,20 @@ void start(int operations, double pushRatio, double popRatio, int _num_threads) 
 	}
 
 	duration = (std::clock() - start) / (double) CLOCKS_PER_SEC;
-	std::cout << "Time: " << duration << "\n" << std::flush;
-
-	// the_Stack.printBuffers();
+	std::cout << duration << "\n" << std::flush;
 
 	// Clean up memory.
 	for (int i = 0; i < _num_threads; i++) {
 		pthread_detach(threads[i]);
 	}
 
-	// int e = the_Stack.pop();
-	// std::cout << "E: " << e << "\n" << std::flush;
-
-	the_Stack.printBuffers();
+	// the_Stack.printBuffers();
 }
 
 
 int main(int argc, char *argv[]) {
-
-	// TS_Stack<int> the_Stack(2, INT_MIN);
-	// the_Stack.push(10, 0);
-	// the_Stack.push(11, 0);
-	// the_Stack.push(12, 0);
-	// the_Stack.push(13, 1);
-	// the_Stack.printBuffers();
-	// int t;
-	// for (int i = 0; i < 4; i++) {
-	// 	t = the_Stack.pop();
-	// 	std::cout << "T: " << t << "\n" << endl;
-	// 	the_Stack.printBuffers();
-	// }
-
-    double popRatio = 0.5, pushRatio = 0.5;
-    int operations = 10000, threads = 2;
-
-	// std::cout << argc << " <- argc" << endl;
+    double popRatio = 0.25, pushRatio = 0.75;
+    int operations = 1000000, threads = 8;
 
     if (argc != 5) {
         // threads = atoi(argv[0]);
@@ -548,8 +429,9 @@ int main(int argc, char *argv[]) {
         std::cout << "Number of push ratio 0.5\n";
         std::cout << "Number of pop ratio 0.5\n";
     }
-
-	start(operations, pushRatio, popRatio, threads);
+	for (int i = 0; i < 10; i++) {
+		start(operations, pushRatio, popRatio, threads);
+	}
+	
 	return 0;
 }
-
