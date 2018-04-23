@@ -357,6 +357,7 @@ void start(int operations, double pushRatio, double popRatio, int _num_threads) 
 	double maxPush = (double) operations * pushRatio;
 	double maxPop = (double) operations * popRatio;
 
+
 	/* Initialize and set thread detached attribute */
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
@@ -404,31 +405,27 @@ void start(int operations, double pushRatio, double popRatio, int _num_threads) 
 	duration = (std::clock() - start) / (double) CLOCKS_PER_SEC;
 	std::cout << duration << "\n" << std::flush;
 
-	// Clean up memory.
-	for (int i = 0; i < _num_threads; i++) {
-		pthread_detach(threads[i]);
-	}
-
 	// the_Stack.printBuffers();
 }
 
 
 int main(int argc, char *argv[]) {
-    double popRatio = 0.25, pushRatio = 0.75;
-    int operations = 1000000, threads = 8;
+    double popRatio = 0.50, pushRatio = 0.50;
+    int operations = 100000, threads = 4;
 
-    if (argc != 5) {
-        // threads = atoi(argv[0]);
-        // operations = atoi(argv[1]);
-        // pushRatio = atof(argv[2]);
-        // popRatio = atof(argv[3]);
+    if (argc == 5) {
+        threads = atoi(argv[1]);
+        operations = atoi(argv[2]);
+        pushRatio = atof(argv[3]);
+        popRatio = atof(argv[4]);
     } else {
         std::cout << "Incorrect argument count. Default values choosen:\n" << std::endl;
         std::cout << "Number of threads 4\n";
-        std::cout << "Number of operations 1000\n";
+        std::cout << "Number of operations 100000\n";
         std::cout << "Number of push ratio 0.5\n";
         std::cout << "Number of pop ratio 0.5\n";
     }
+
 	for (int i = 0; i < 10; i++) {
 		start(operations, pushRatio, popRatio, threads);
 	}
