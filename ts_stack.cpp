@@ -419,16 +419,16 @@ int main(int argc, char *argv[]) {
         pushRatio = atof(argv[3]);
         popRatio = atof(argv[4]);
     } else {
-        std::cout << "Incorrect argument count. Default values choosen:\n" << std::endl;
+        std::cout << "Incorrect argument count. Default values choosen:\n";
         std::cout << "Number of threads 4\n";
         std::cout << "Number of operations 100000\n";
         std::cout << "Number of push ratio 0.5\n";
         std::cout << "Number of pop ratio 0.5\n";
     }
 
-	for (int i = 0; i < 10; i++) {
-		start(operations, pushRatio, popRatio, threads);
-	}
+	// for (int i = 0; i < 10; i++) {
+	start(operations, pushRatio, popRatio, threads);
+	// }
 	
 	return 0;
 }
